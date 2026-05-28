@@ -1,4 +1,4 @@
-ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn = 500, alpha = 0.95, beta = 2, prob_move = rep(1/3, 3)) {
+ordinal_BART_cat = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn = 500, alpha = 0.95, beta = 2, prob_move = rep(1/3, 3)) {
   
   ## :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
   ## Ordinal BART
@@ -54,12 +54,14 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
     # sigma2[l] = (3 / (w0 * sqrt(L)))^2
     
     T[[l]] = list()
-    T[[l]]$rules = "T"
+    # T[[l]]$rules = "T"
     T[[l]]$T_l = Node$new("T")
     T[[l]]$T_l$ix = 1:n
     T[[l]]$T_l$res = s
+    T[[l]]$T_l$count_j = rep(0, p)
+    T[[l]]$T_l$threshold = matrix(-999, n, p)
   }
-
+  
   ## ::::: initialiaze alpha and mu
   
   # prior mean
@@ -88,7 +90,7 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
     if (b %% 500 == 0) {
       cat(":::::::::::: iteration:", b, "\n")
     }
-
+    
     ## ::::: update latent factors omega and the intercept
     
     c_tmp = 1
@@ -142,7 +144,9 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
         ## ::::::::::::::::::::::::::::::::::::::::::::::::::::
         ## GROW STEP 0: there is only root
         ## ::::::::::::::::::::::::::::::::::::::::::::::::::::
-       
+        
+        # print("GROW0")
+        
         check = 1
         while (check == 1) {
           j = sample(1:p, 1)
@@ -150,7 +154,7 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
           threshold = X[id_n_adj, j]
           check = ifelse(((threshold == max(X[, j])) || (threshold == min(X[, j]))) == TRUE, 1, 0)
         }
-        tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
+        # tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
         
         T_star = data.tree::Clone(T[[l]]$T_l)
         TMP = GROW_step0(T_star, y, X[, j], j, threshold)
@@ -160,7 +164,7 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
         D_star[l] = D[l] + 1
         Di_star_new = Di_star
         Di_star_new[, l] = TMP[[2]]
-      
+        
       } else {
         
         check = apply(T[[l]]$T_l$Get(function(node) node$res, filterFun = isLeaf), 2, sum)
@@ -177,6 +181,8 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
           ## GROW STEP
           ## ::::::::::::::::::::::::::::::::::::::::::::::::::::
           
+          # print("Grow")
+          
           check = 1
           while (check == 1) {
             ds = sample(1:D[l], 1)
@@ -191,10 +197,19 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
             ind_tmp = T[[l]]$T_l$leaves[[ds]]$ix
             id_n_adj = sample(ind_tmp, 1)
             threshold = X[id_n_adj, j]
-            check = ifelse(((threshold == min(X[ind_tmp, j])) || (threshold == max(X[ind_tmp, j]))) == TRUE, 1, 0) 
+            check = ifelse(((threshold == min(X[ind_tmp, j])) || (threshold == max(X[ind_tmp, j]))) == TRUE, 1, 0)
+            
+            if ((T[[l]]$T_l$count_j[j] >= (n-2)) || (threshold %in% T[[l]]$T_l$threshold[, j])) {
+              check = 1
+            } else {
+              check = 0
+            }
           }
           
-          tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
+          # if (check == 1) {
+          #   next
+          # }
+          # tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
           
           T_star = data.tree::Clone(T[[l]]$T_l)
           TMP = GROW_step(T_star, y, X[, j], ds, j, threshold)
@@ -214,6 +229,7 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
           ## ::::::::::::::::::::::::::::::::::::::::::::::::::::
           ## PRUNE STEP
           ## ::::::::::::::::::::::::::::::::::::::::::::::::::::
+          # print("Prune")
           
           check = FALSE
           while (check == FALSE) {
@@ -229,8 +245,8 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
             ts = ts[length(j)]
             j = j[length(j)]
           }
-          id_n_adj = which(X[, j] == ts)
-          tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
+          # id_n_adj = which(X[, j] == ts)
+          # tmp_rule = paste("x", j, ".", id_n_adj[1], sep = "")
           
           T_star = data.tree::Clone(T[[l]]$T_l)
           TMP = PRUNE_step(T_star, ds, n)
@@ -249,6 +265,8 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
           ## CHANGE STEP
           ## ::::::::::::::::::::::::::::::::::::::::::::::::::::
           
+          # print("Change")
+          
           ## remove children
           check = FALSE
           while (check == FALSE) {
@@ -263,8 +281,8 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
             ts = ts[length(j)]
             j = j[length(j)]
           }
-          id_n_adj = which(X[, j] == ts)
-          tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
+          # id_n_adj = which(X[, j] == ts)
+          # tmp_rule = paste("x", j, ".", id_n_adj, sep = "")
           
           ## add new split
           check = 1
@@ -274,8 +292,14 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
             id_n_adj = sample(ind_tmp, 1)
             threshold = X[id_n_adj, j2]
             check = ifelse(((threshold == min(X[ind_tmp, j2])) || (threshold == max(X[ind_tmp, j2]))) == TRUE, 1, 0) 
+            
+            if ((T[[l]]$T_l$count_j[j2] >= (n-2)) || (threshold %in% T[[l]]$T_l$threshold[, j2])) {
+              check = 1
+            } else {
+              check = 0
+            }
           }
-          tmp_rule2 = paste("x", j2, ".", id_n_adj, sep = "")
+          # tmp_rule2 = paste("x", j2, ".", id_n_adj, sep = "")
           
           T_star = data.tree::Clone(T[[l]]$T_l)
           TMP = CHANGE_step(T_star, y, X[, j2], ds, j2, threshold)
@@ -288,7 +312,7 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
           # print(T_star$Get(function(node) node$res, filterFun = isLeaf))
         }
       }
-
+      
       # print(T_star$Get(function(node) node$res, filterFun = isLeaf))
       
       ## :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -389,18 +413,40 @@ ordinal_BART = function(y, X, L, w0 = 0.5, s0 = 0.3, mcmc_iter = 1000, mcmc_bn =
         mean_post = mean_post_new
         var_post = var_post_new
         
+        # print(":::::::::... \n")
+        # print(T[[l]]$rules)
+        # print(tmp_rule)
+        
         if (depth[l] == 0 || move == 1) {
-          T[[l]]$rules = c(T[[l]]$rules, tmp_rule)
+          T[[l]]$T_l$count_j[j] = T[[l]]$T_l$count_j[j] + 1
+          
+          ind_tmp = which(T[[l]]$T_l$threshold[, j] == -999)
+          T[[l]]$T_l$threshold[ind_tmp[1], j] = threshold
+          
+          # T[[l]]$rules = c(T[[l]]$rules, tmp_rule)
           depth[l] = depth[l] + 1
         } else if (move == 2) {
-          T[[l]]$rules = T[[l]]$rules[-which(T[[l]]$rules == tmp_rule)]
+          T[[l]]$T_l$count_j[j] = T[[l]]$T_l$count_j[j] - 1
+          
+          ind_tmp = which(T[[l]]$T_l$threshold[, j] == ts)
+          T[[l]]$T_l$threshold[ind_tmp, j] = -999
+          
+          # T[[l]]$rules = T[[l]]$rules[-which(T[[l]]$rules == tmp_rule)]
           depth[l] = depth[l] - 1
         } else {
-          T[[l]]$rules = T[[l]]$rules[-which(T[[l]]$rules == tmp_rule)]
-          T[[l]]$rules = c(T[[l]]$rules, tmp_rule2)
+          T[[l]]$T_l$count_j[j] = T[[l]]$T_l$count_j[j] - 1
+          T[[l]]$T_l$count_j[j2] = T[[l]]$T_l$count_j[j2] + 1
+          
+          ind_tmp = which(T[[l]]$T_l$threshold[, j] == ts)
+          T[[l]]$T_l$threshold[ind_tmp, j] = -999
+          ind_tmp = which(T[[l]]$T_l$threshold[, j2] == -999)
+          T[[l]]$T_l$threshold[ind_tmp[1], j2] = threshold
+          
+          # T[[l]]$rules = T[[l]]$rules[-which(T[[l]]$rules == tmp_rule)]
+          # T[[l]]$rules = c(T[[l]]$rules, tmp_rule2)
         }
       }
-         
+      
       ## :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
       ## sample mu
       

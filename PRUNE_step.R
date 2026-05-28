@@ -1,4 +1,4 @@
-PRUNE_step = function(T, ds) {
+PRUNE_step = function(T, ds, n) {
   
   ## :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
   ## function to PRUNE a singly internal node of a tree T
@@ -17,7 +17,7 @@ PRUNE_step = function(T, ds) {
   tmp_parent$RemoveChild(tmp_node_L)
   tmp_parent$RemoveChild(tmp_node_R)
   
-  Di_star_new = rep(0, length(y))
+  Di_star_new = rep(0, n)
   for (d in 1:T$leafCount) {
     for (i in T$leaves[[d]]$ix) {
       Di_star_new[i] = d
