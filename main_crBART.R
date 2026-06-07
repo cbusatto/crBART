@@ -73,5 +73,5 @@ res_crbart = crBART(y = as.numeric(y), X = X,
 var_importance_crBART(res_crbart, B/2, p)
 
 # prediction
-yprob_crbart = pred_crBART_mat(res_crbart, Xtest, B/2)
+yprob_crbart = pred_crBART(res_crbart, Xtest, B/2)
 ypred_crbart = apply(yprob_crbart, 1, function(x) which.max(x))
